@@ -22,7 +22,7 @@ class EventListener implements Listener{
     /**
     * @param PlayerInteractEvent $ev
     */
-    public function onInteract(PlayerInteractEvent $ev){
+    public function onInteract(PlayerInteractEvent $ev): void {
         if($ev->getAction() !== PlayerInteractEvent::RIGHT_CLICK_BLOCK) return;
         $table = $this->plugin->shop->getNested('enchanting-table');
         if($table and $ev->getBlock() instanceof EnchantingTable){
