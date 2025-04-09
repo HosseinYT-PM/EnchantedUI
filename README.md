@@ -1,7 +1,7 @@
 # EnchantedUI
 A simple enchant shop ui updated by HosseinYT</br>
 </br></br></br></br>
-<a href="https://discord.gg/n4hANRh"><img src="logo.png" alt="Discord server"/></a>
+<a href="https://github.com/HosseinYT-PM/EnchantedUI"><img src="logo.png" alt="Plugin Icon"/></a>
 
 # Depends:
 • **EconomyAPI** by **onebone** updated by **mathchat900** [EconomyAPI PM5](https://github.com/mathchat900/EconomyAPI-PM5)
