@@ -1,7 +1,7 @@
 # EnchantedUI
 A simple enchant shop ui updated by HosseinYT</br>
 </br></br></br></br>
-![Screenshot of a comment on a GitHub issue showing an image, added in the Markdown, of an Octocat smiling and raising a tentacle.](logo.png)
+<a href="https://discord.gg/n4hANRh"><img src="logo.png" alt="Discord server"/></a>
 
 # Depends:
 • **EconomyAPI** by **onebone** updated by **mathchat900** [EconomyAPI PM5](https://github.com/mathchat900/EconomyAPI-PM5)
