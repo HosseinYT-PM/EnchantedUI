@@ -1,6 +1,7 @@
 <?php
 namespace ItsRealNise\EnchantedUI\Commands;
 
+use pocketmine\player\Player;
 use pocketmine\plugin\Plugin;
 use pocketmine\command\{
     Command,
@@ -8,7 +9,6 @@ use pocketmine\command\{
     CommandSender
 };
 use pocketmine\plugin\PluginOwned;
-use pocketmine\Player;
 use ItsRealNise\EnchantedUI\Main;
 
 /**
@@ -43,8 +43,10 @@ class ShopCommand extends Command implements PluginOwned {
         /**if(!$sender instanceof Player){
             $sender->sendMessage("Please use this in-game.");
             return true;
-        }*/  
-        $this->plugin->listForm($sender);
+        }*/
+        if ($sender instanceof Player) {
+            $this->plugin->listForm($sender);
+        }
         return true;
 	}
    
