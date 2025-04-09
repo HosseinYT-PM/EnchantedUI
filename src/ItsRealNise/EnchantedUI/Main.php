@@ -73,17 +73,14 @@ class Main extends PluginBase{
             return;
         }
     }
-
-    /**
-     * @param Player $player
-     */
-    public function listForm(Player $player): void{
+    public function listForm(Player $player): SimpleForm {
         $form = new SimpleForm(function (Player $player, $data = null){
             if ($data === null){
                 $this->sendNote($player , $this->shop->getNested('messages.thanks'));
-                return;
+                return false;
             }
             $this->buyForm($player, $data);
+            return false;
         });
         foreach($this->shop->getNested('shop') as $name){
             $var = array(
@@ -94,6 +91,7 @@ class Main extends PluginBase{
         }
         $form->setTitle($this->shop->getNested('Title'));
         $player->sendForm($form);
+        return $form;
     }
 
     /**
@@ -115,18 +113,18 @@ class Main extends PluginBase{
             );
             if ($data == null){
                 $this->listForm($player);
-                return;
+                return false;
             }
             if(!$player->getInventory()->getItemInHand() instanceof Tool and !$player->getInventory()->getItemInHand() instanceof Armor){
                 $this->sendNote($player ,$this->shop->getNested('messages.hold-item'), $var);
-                return;
+                return false;
             }
             if(!is_null($incompatible)){
                 $this->sendNote($player , $this->shop->getNested('messages.incompatible-enchantment'), $var);
-                return;
+                return false;
             }
             if($data[1] > $array[$id]['max-level'] or $data[1] < 1){
-                return;
+                return false;
             }
             if($this->eco->myMoney($player) > $c = $array[$id]['price'] * $data[1]){
                 $this->eco->reduceMoney($player, $c);
@@ -135,6 +133,7 @@ class Main extends PluginBase{
             }else{
                 $this->sendNote($player , $this->shop->getNested('messages.not-enough-money'), $var);
             }
+            return false;
         }
         );
         $form->addLabel($this->replace($this->shop->getNested('messages.label'),["PRICE" => $array[$id]['price']]));
@@ -146,6 +145,7 @@ class Main extends PluginBase{
     /**
      * @param Player $player
      * @param null|mixed|string $msg
+     * @param array $var
      */
     public function sendNote(Player $player, $msg, array $var = []): void{
         if(!is_null($msg)) $player->sendMessage($this->replace($msg, $var));
@@ -191,6 +191,7 @@ class Main extends PluginBase{
                 return $id;
             }
         }
+        return false;
     }
 
     /**
