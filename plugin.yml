@@ -2,9 +2,9 @@
 name: EnchantedUI
 main: ItsRealNise\EnchantedUI\Main
 version: "1.0"
-api: 4.0.0
+api: 5.0.0
 load: POSTWORLD
-author: ItsRealNise
+author: ItsRealNise updated by HosseinYT
 permissions:
   eshop.command:
     default: true
