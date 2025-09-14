@@ -5,6 +5,10 @@ version: "1.0"
 api: 5.0.0
 load: POSTWORLD
 author: ItsRealNise updated by HosseinYT
+commands:
+  eshop:
+    description: Enchant Menu
+    permission: eshop.command
 permissions:
   eshop.command:
     default: true
