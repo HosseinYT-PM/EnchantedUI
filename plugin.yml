@@ -5,6 +5,7 @@ version: "1.0"
 api: 5.0.0
 load: POSTWORLD
 author: ItsRealNise updated by HosseinYT
+depends: FormAPI
 commands:
   eshop:
     description: Enchant Menu
