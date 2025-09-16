@@ -3,7 +3,7 @@
 namespace ItsRealNise\EnchantedUI;
 
 use DaPigGuy\PiggyCustomEnchants\CustomEnchants\CustomEnchants;
-use ItsRealNise\EnchantedUI\libs\jojoe77777\FormAPI\{CustomForm, SimpleForm};
+use jojoe77777\FormAPI\{CustomForm, SimpleForm};
 use onebone\economyapi\EconomyAPI;
 use pocketmine\command\Command;
 use pocketmine\command\CommandSender;
