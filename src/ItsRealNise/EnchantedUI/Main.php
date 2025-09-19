@@ -2,7 +2,6 @@
 
 namespace ItsRealNise\EnchantedUI;
 
-use DaPigGuy\PiggyCustomEnchants\CustomEnchants\CustomEnchants;
 use jojoe77777\FormAPI\{CustomForm, SimpleForm};
 use onebone\economyapi\EconomyAPI;
 use pocketmine\command\Command;
@@ -23,8 +22,9 @@ class Main extends PluginBase
     /** @var Config $shop */
     public $shop;
 
-    public $piggyCE;
     public $eco;
+    public $piggyCE;
+    public $usePiggyCE;
 
     public function onEnable(): void
     {
@@ -38,8 +38,21 @@ class Main extends PluginBase
         $this->UpdateConfig();
         $this->saveDefaultConfig();
         $this->getServer()->getPluginManager()->registerEvents(new EventListener($this), $this);
-        $this->piggyCE = $this->getServer()->getPluginManager()->getPlugin("PiggyCustomEnchants");
-        $this->eco = $this->getServer()->getPluginManager()->getPlugin("EconomyAPI");
+        $this->eco = EconomyAPI::getInstance();
+
+        // Check if PiggyCustomEnchants should be used
+        $this->usePiggyCE = $this->shop->getNested('piggycustomenchants', false);
+
+        // Load PiggyCustomEnchants if enabled in config and available
+        if ($this->usePiggyCE) {
+            $this->piggyCE = $this->getServer()->getPluginManager()->getPlugin("PiggyCustomEnchants");
+            if ($this->piggyCE !== null) {
+                $this->getLogger()->info("PiggyCustomEnchants support enabled!");
+            } else {
+                $this->getLogger()->warning("PiggyCustomEnchants is enabled in config but not installed!");
+                $this->usePiggyCE = false;
+            }
+        }
     }
 
     public function UpdateConfig(): void
@@ -54,10 +67,15 @@ class Main extends PluginBase
             $shop = $this->shop->getAll();
             $shop['version'] = '0.5';
             $shop['enchanting-table'] = true;
+            $shop['piggycustomenchants'] = false; // Add default value
             $shop['messages']['incompatible-enchantment'] = '';
             foreach ($shop['shop'] as $list => $data) {
                 $data['incompatible-enchantments'] = array();
                 $shop['shop'][$list] = $data;
+            }
+            // Initialize custom enchantments shop if not exists
+            if (!isset($shop['customenchantsshop'])) {
+                $shop['customenchantsshop'] = [];
             }
             $this->shop->setAll($shop);
             $this->shop->save();
@@ -83,27 +101,54 @@ class Main extends PluginBase
         return false;
     }
 
-    public function listForm(Player $player): SimpleForm
+    public function listForm(Player $player): void
     {
-        $form = new SimpleForm(function (Player $player, $data = null) {
+        $shopData = $this->shop->getNested('shop', []);
+        $customShopData = $this->usePiggyCE ? $this->shop->getNested('customenchantsshop', []) : [];
+
+        // اضافه کردن کلید 'custom' برای تشخیص آیتم‌های سفارشی
+        foreach ($customShopData as $key => $item) {
+            $customShopData[$key]['custom'] = true;
+        }
+        foreach ($shopData as $key => $item) {
+            $shopData[$key]['custom'] = false;
+        }
+
+        $allItems = array_merge($shopData, $customShopData);
+
+        $form = new SimpleForm(function (Player $player, $data = null) use ($allItems) {
             if ($data === null) {
                 $this->sendNote($player, $this->shop->getNested('messages.thanks'));
-                return false;
+                return;
             }
-            $this->buyForm($player, $data);
-            return false;
+
+            $selectedItem = $allItems[$data] ?? null;
+            if ($selectedItem === null) return;
+
+            if ($selectedItem['custom']) {
+                $this->buyCustomForm($player, $data);
+            } else {
+                $this->buyForm($player, $data);
+            }
         });
-        foreach ($this->shop->getNested('shop') as $name) {
-            $var = array(
-                "NAME" => $name['name'],
-                "PRICE" => $name['price']
-            );
-            $form->addButton($this->replace($this->shop->getNested('Button'), $var));
-        }
+
         $form->setTitle($this->shop->getNested('Title'));
+
+        // اضافه کردن دکمه‌ها
+        foreach ($allItems as $item) {
+            $var = [
+                "NAME" => $item['name'],
+                "PRICE" => $item['price']
+            ];
+            $buttonText = $item['custom'] ? "§6[CUSTOM] " . $this->replace($this->shop->getNested('Button'), $var)
+                : $this->replace($this->shop->getNested('Button'), $var);
+
+            $form->addButton($buttonText);
+        }
+
         $player->sendForm($form);
-        return $form;
     }
+
 
     /**
      * @param Player $player
@@ -136,91 +181,210 @@ class Main extends PluginBase
     public function buyForm(Player $player, int $id): void
     {
         $array = $this->shop->getNested('shop');
+        if (!isset($array[$id])) {
+            $player->sendMessage("§cEnchantment not found!");
+            return;
+        }
+
         $form = new CustomForm(function (Player $player, $data = null) use ($array, $id) {
             if ($data === null) {
                 return false;
             }
+
+            $incompatible = $this->isCompatible($player, $array[$id]['incompatible-enchantments']);
             $var = array(
                 "NAME" => $array[$id]['name'],
                 "PRICE" => $array[$id]['price'] * $data[1],
                 "LEVEL" => $data[1],
                 "MONEY" => $this->eco->myMoney($player),
-                "INCOMPATIBLE" => $incompatible = $this->isCompatible($player, $array[$id]['incompatible-enchantments'])
+                "INCOMPATIBLE" => $incompatible
             );
-            if ($data == null) {
-                $this->listForm($player);
-                return false;
-            }
-            if (!$player->getInventory()->getItemInHand() instanceof Tool and !$player->getInventory()->getItemInHand() instanceof Armor) {
+
+            if (!$player->getInventory()->getItemInHand() instanceof Tool && !$player->getInventory()->getItemInHand() instanceof Armor) {
                 $this->sendNote($player, $this->shop->getNested('messages.hold-item'), $var);
                 return false;
             }
-            if (!is_null($incompatible)) {
+
+            if ($incompatible !== false) {
                 $this->sendNote($player, $this->shop->getNested('messages.incompatible-enchantment'), $var);
                 return false;
             }
-            if ($data[1] > $array[$id]['max-level'] or $data[1] < 1) {
+
+            if ($data[1] > $array[$id]['max-level'] || $data[1] < 1) {
+                $player->sendMessage("§cInvalid enchantment level!");
                 return false;
             }
-            if ($this->eco->myMoney($player) > $c = $array[$id]['price'] * $data[1]) {
-                $this->eco->reduceMoney($player, $c);
+
+            $cost = $array[$id]['price'] * $data[1];
+            if ($this->eco->myMoney($player) >= $cost) {
+                $this->eco->reduceMoney($player, $cost);
                 $this->enchantItem($player, $data[1], $array[$id]['enchantment']);
                 $this->sendNote($player, $this->shop->getNested('messages.paid-success'), $var);
             } else {
                 $this->sendNote($player, $this->shop->getNested('messages.not-enough-money'), $var);
             }
             return false;
-        }
-        );
-        $form->addLabel($this->replace($this->shop->getNested('messages.label'), ["PRICE" => $array[$id]['price']]));
+        });
+
         $form->setTitle($this->shop->getNested('Title'));
-        $form->addSlider($this->shop->getNested('slider-title'), 1, $array[$id]['max-level'], 1, -1);
+        $form->addLabel($this->replace($this->shop->getNested('messages.label'), ["PRICE" => $array[$id]['price']]));
+        $form->addSlider($this->shop->getNested('slider-title'), 1, $array[$id]['max-level'], 1, 1);
         $player->sendForm($form);
     }
 
     /**
      * @param Player $player
-     * @param array $array
-     *
-     * @return int|mixed|null
+     * @param int $id
      */
-    public function isCompatible(Player $player, array $array)
+    public function buyCustomForm(Player $player, int $id): void
+    {
+        if (!$this->usePiggyCE) {
+            $player->sendMessage("§cCustom enchantments are disabled!");
+            return;
+        }
+
+        $array = $this->shop->getNested('customenchantsshop');
+        if (!isset($array[$id])) {
+            $player->sendMessage("§cCustom enchantment not found!");
+            return;
+        }
+
+        $form = new CustomForm(function (Player $player, $data = null) use ($array, $id) {
+            if ($data === null) {
+                return false;
+            }
+
+            $incompatible = $this->isCustomCompatible($player, $array[$id]['incompatible-enchantments']);
+            $var = array(
+                "NAME" => $array[$id]['name'],
+                "PRICE" => $array[$id]['price'] * $data[1],
+                "LEVEL" => $data[1],
+                "MONEY" => $this->eco->myMoney($player),
+                "INCOMPATIBLE" => $incompatible
+            );
+
+            if (!$player->getInventory()->getItemInHand() instanceof Tool && !$player->getInventory()->getItemInHand() instanceof Armor) {
+                $this->sendNote($player, $this->shop->getNested('messages.hold-item'), $var);
+                return false;
+            }
+
+            if ($incompatible !== false) {
+                $this->sendNote($player, $this->shop->getNested('messages.incompatible-enchantment'), $var);
+                return false;
+            }
+
+            if ($data[1] > $array[$id]['max-level'] || $data[1] < 1) {
+                $player->sendMessage("§cInvalid enchantment level!");
+                return false;
+            }
+
+            $cost = $array[$id]['price'] * $data[1];
+            if ($this->eco->myMoney($player) >= $cost) {
+                $this->eco->reduceMoney($player, $cost);
+                $this->enchantItem($player, $data[1], $array[$id]['enchantment']);
+                $this->sendNote($player, $this->shop->getNested('messages.paid-success'), $var);
+            } else {
+                $this->sendNote($player, $this->shop->getNested('messages.not-enough-money'), $var);
+            }
+            return false;
+        });
+
+        $form->setTitle("§6Custom " . $this->shop->getNested('Title'));
+        $form->addLabel($this->replace($this->shop->getNested('messages.label'), ["PRICE" => $array[$id]['price']]));
+        $form->addSlider($this->shop->getNested('slider-title'), 1, $array[$id]['max-level'], 1, 1);
+        $player->sendForm($form);
+    }
+
+    /**
+     * @param Player $player
+     * @param array $incompatibleEnchantments
+     *
+     * @return int|false
+     */
+    public function isCompatible(Player $player, array $incompatibleEnchantments)
     {
         $item = $player->getInventory()->getItemInHand();
-        //TODO: the ability to use strings
-        foreach ($array as $enchantment) {
-            if ($item->hasEnchantment($enchantment)) {
-                $id = $enchantment;
-                return $id;
+
+        if (empty($incompatibleEnchantments)) {
+            return false;
+        }
+
+        foreach ($item->getEnchantments() as $enchantmentInstance) {
+            $enchantmentId = EnchantmentIdMap::getInstance()->toId($enchantmentInstance->getType());
+
+            if (in_array($enchantmentId, $incompatibleEnchantments)) {
+                return $enchantmentId;
             }
         }
+
+        return false;
+    }
+
+    /**
+     * Check compatibility for custom enchantments
+     */
+    public function isCustomCompatible(Player $player, array $incompatibleEnchantments): bool
+    {
+        // For custom enchantments, we'll need a different approach
+        // This is a placeholder - you might need to implement custom compatibility checking
         return false;
     }
 
     /**
      * @param Player $player
      * @param int $level
-     * @param int|String $enchantment
+     * @param int|string $enchantment
      */
     public function enchantItem(Player $player, int $level, $enchantment): void
     {
         $item = $player->getInventory()->getItemInHand();
-        if (is_string($enchantment)) {
-            $ench = EnchantmentIdMap::getInstance()->fromId((string)$enchantment);
-            if ($this->piggyCE !== null && $ench === null) {
-                $ench = CustomEnchants::getEnchantmentByName((string)$enchantment);
-            }
-            if ($this->piggyCE !== null && $ench instanceof CustomEnchants) {
-                $this->piggyCE->addEnchantment($item, $ench->getName(), (int)$level);
-            } else {
-                $item->addEnchantment(new EnchantmentInstance($ench, (int)$level));
-            }
+
+        // Handle PiggyCustomEnchants if available and enchantment is a string
+        if ($this->usePiggyCE && $this->piggyCE !== null && is_string($enchantment)) {
+            $this->applyCustomEnchantment($player, $item, $level, $enchantment);
+            return;
         }
-        if (is_int($enchantment)) {
-            $ench = EnchantmentIdMap::getInstance()->fromId($enchantment);
-            $item->addEnchantment(new EnchantmentInstance($ench, (int)$level));
+
+        // Handle vanilla enchantments
+        $this->applyVanillaEnchantment($player, $item, $level, $enchantment);
+    }
+
+    /**
+     * Apply vanilla Minecraft enchantment
+     */
+    private function applyVanillaEnchantment(Player $player, $item, int $level, $enchantment): void
+    {
+        $enchantmentId = is_numeric($enchantment) ? (int)$enchantment : $enchantment;
+        $ench = EnchantmentIdMap::getInstance()->fromId($enchantmentId);
+
+        if ($ench !== null) {
+            $enchantmentInstance = new EnchantmentInstance($ench, $level);
+            $item->addEnchantment($enchantmentInstance);
+            $player->getInventory()->setItemInHand($item);
+        } else {
+            $player->sendMessage("§cFailed to apply enchantment: Invalid enchantment ID");
         }
-        $player->getInventory()->setItemInHand($item);
+    }
+
+    /**
+     * Apply PiggyCustomEnchants enchantment
+     */
+    private function applyCustomEnchantment(Player $player, $item, int $level, string $enchantmentName): void
+    {
+        try {
+            $reflectionClass = new \ReflectionClass($this->piggyCE);
+
+            if ($reflectionClass->hasMethod('addEnchantment')) {
+                $method = $reflectionClass->getMethod('addEnchantment');
+                $method->invoke($this->piggyCE, $item, $enchantmentName, $level);
+                $player->getInventory()->setItemInHand($item);
+                return;
+            }
+
+            $player->sendMessage("§cFailed to apply custom enchantment");
+
+        } catch (\ReflectionException $e) {
+            $player->sendMessage("§cError applying custom enchantment");
+        }
     }
 }
-
